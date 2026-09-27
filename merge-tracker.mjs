@@ -78,26 +78,35 @@ const BATCH_STATE_FILE = process.env.CAREER_OPS_BATCH_STATE
 // there is fabricated evidence, not just cosmetically ambiguous like the
 // score/status column-swap check below -- it must never merge, however
 // well-formed the TSV itself looks in isolation.
-function loadFailedReportNumbers(path) {
-  const failed = new Set();
-  if (!existsSync(path)) return failed;
+function reportNumbersWithStatus(path, wanted) {
+  const nums = new Set();
+  if (!existsSync(path)) return nums;
   for (const line of readFileSync(path, 'utf-8').split(/\r?\n/)) {
     if (!line.trim() || line.startsWith('id\t')) continue;
     const cols = line.split('\t');
     if (cols.length < 6) continue;
     const status = cols[2];
     const reportNum = cols[5];
-    if (status === 'failed' && reportNum && reportNum !== '-') {
+    if (status === wanted && reportNum && reportNum !== '-') {
       // Digits only, positive, safe: parseInt would accept "12abc" and
       // 9007199254740992, and an unsafe number in the occupied set makes
       // reserveReportNumbers throw "No safe report-number range remains".
       const n = /^\d+$/.test(reportNum) ? Number(reportNum) : NaN;
-      if (Number.isSafeInteger(n) && n > 0) failed.add(n);
+      if (Number.isSafeInteger(n) && n > 0) nums.add(n);
     }
   }
-  return failed;
+  return nums;
+}
+function loadFailedReportNumbers(path) {
+  return reportNumbersWithStatus(path, 'failed');
 }
 const FAILED_REPORT_NUMBERS = loadFailedReportNumbers(BATCH_STATE_FILE);
+// Read only to explain a skip, never to lift one. Before #4391, a failed
+// worker's released number could be handed to the next offer, so one number
+// carries both a "failed" and a "completed" row. The guard still has to hold
+// there (the failed worker may have written a TSV under that number too), but
+// the warning can say what the user is most likely looking at (#4505).
+const COMPLETED_REPORT_NUMBERS = reportNumbersWithStatus(BATCH_STATE_FILE, 'completed');
 const DRY_RUN = process.argv.includes('--dry-run');
 const VERIFY = process.argv.includes('--verify');
 const MIGRATE = process.argv.includes('--migrate');
@@ -1476,6 +1485,9 @@ for (const file of tsvFiles) {
 
   if (reportNum && FAILED_REPORT_NUMBERS.has(reportNum)) {
     console.warn(`⚠️  Skipping ${file}: report #${reportNum} is marked "failed" in batch-state.tsv — refusing to merge a tracker line for an offer the batch runner itself recorded as failed (possible fabricated result)`);
+    if (COMPLETED_REPORT_NUMBERS.has(reportNum)) {
+      console.warn(`   batch-state.tsv also has a "completed" row for #${reportNum}: the number was likely reused after a failure by an older batch runner. If this report is the completed offer's, set report_num to "-" on the failed row and re-run.`);
+    }
     skipped++;
     continue;
   }

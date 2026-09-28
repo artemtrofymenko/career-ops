@@ -73,7 +73,8 @@ else fail(`reused number: merged=${reused.merged}, guard line present=${/is mark
 const clean = merge([]);
 if (clean.merged) pass('control: the same addition merges when batch-state has no row for its number');
 else fail(`control failed, the fixture does not merge at all: ${clean.out.trim().split('\n').slice(-2).join(' | ')}`);
-if (HINT.test(reused.out)) pass('the skip explains the reused number and how to clear it');
+// Both halves: why it was refused, and the manual fix that clears it.
+if (HINT.test(reused.out) && /set report_num to "-" on the failed row and re-run/.test(reused.out)) pass('the skip explains the reused number and how to clear it');
 else fail(`no reuse hint in the skip warning: ${reused.out.trim().split('\n').filter((l) => /Skipping/.test(l)).join(' | ') || '(no skip line)'}`);
 
 // Only a failed row: the fabrication case the guard was written for. No hint.

@@ -24,7 +24,7 @@ import { execFileSync, spawnSync } from 'child_process';
 import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { pass, fail, hermeticGitEnv } from './helpers.mjs';
+import { pass, fail, hermeticGitEnv, hermeticGitRunner } from './helpers.mjs';
 
 console.log('\nhermetic git env — ambient GIT_CONFIG* must not reach a fixture');
 
@@ -108,6 +108,18 @@ try {
   const ambientBefore = '[user]\n\tname = ambient-leak\n';
   writeFileSync(ambientConfig, ambientBefore);
 
+  // A fourth channel that is not config at all: GIT_DIR and its companions say
+  // WHERE the repository is, so with one inherited the fixture's git commands
+  // stop being about the fixture. `bystander` stands in for the contributor's
+  // real checkout; it must come out of this exactly as it went in.
+  const bystander = join(ambientRoot, 'bystander');
+  mkdirSync(bystander, { recursive: true });
+  const bystanderGit = hermeticGitRunner(bystander);
+  bystanderGit('init', '-q', '-b', 'main', '.');
+  bystanderGit('config', 'user.name', 'Bystander');
+  const bystanderConfig = join(bystander, '.git', 'config');
+  const bystanderBefore = readFileSync(bystanderConfig, 'utf-8');
+
   const script = [
     "import { writeFileSync } from 'node:fs';",
     "import { join } from 'node:path';",
@@ -129,6 +141,9 @@ try {
       GIT_CONFIG_VALUE_0: excludes,
       GIT_CONFIG_PARAMETERS: "'user.name=parameters-leak'",
       GIT_CONFIG: ambientConfig,
+      GIT_DIR: join(bystander, '.git'),
+      GIT_WORK_TREE: bystander,
+      GIT_INDEX_FILE: join(bystander, '.git', 'index'),
     },
   });
   fixtureDir = (child.stdout || '').match(/^FIXTURE_DIR=(.+)$/m)?.[1]?.trim() ?? '';
@@ -156,6 +171,13 @@ try {
     pass("the fixture's own `git config` writes did not land in the ambient GIT_CONFIG file");
   } else {
     fail(`the fixture wrote into the ambient GIT_CONFIG file: ${JSON.stringify(ambientAfter)}`);
+  }
+
+  const bystanderAfter = readFileSync(bystanderConfig, 'utf-8');
+  if (bystanderAfter === bystanderBefore) {
+    pass('an ambient GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE does not point the fixture at another repository');
+  } else {
+    fail(`the fixture reconfigured the repository an ambient GIT_DIR pointed at: ${JSON.stringify(bystanderAfter)}`);
   }
 } finally {
   rmSync(ambientRoot, { recursive: true, force: true });

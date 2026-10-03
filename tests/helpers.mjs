@@ -1005,6 +1005,13 @@ export function hermeticGitEnv(gitConfigPath, base = process.env) {
   return env;
 }
 
+const REPO_LOCATION_ENV = [
+  'GIT_DIR', 'GIT_WORK_TREE', 'GIT_IMPLICIT_WORK_TREE', 'GIT_COMMON_DIR',
+  'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+  'GIT_GRAFT_FILE', 'GIT_SHALLOW_FILE', 'GIT_NO_REPLACE_OBJECTS',
+  'GIT_REPLACE_REF_BASE', 'GIT_PREFIX',
+];
+
 /**
  * A git runner bound to one fixture repository and to `hermeticGitEnv`.
  *
@@ -1020,11 +1027,20 @@ export function hermeticGitEnv(gitConfigPath, base = process.env) {
  * exposed. The config path does not have to exist; a missing global file is
  * simply an empty one.
  *
+ * Config is not the only way in. A runner is bound to ONE directory, so every
+ * variable that tells git where a repository is has to go as well: with an
+ * ambient GIT_DIR, `cwd` stops deciding which repository a command touches.
+ * Measured before this was closed: the fixture's `git config user.name Test`
+ * rewrote the user.name of the repository GIT_DIR pointed at. A git hook is
+ * the ordinary way to inherit one. The list is git's own, the rest of
+ * `git rev-parse --local-env-vars` after the three hermeticGitEnv handles.
+ *
  * @param {string} dir - The fixture repository.
  * @returns {(...args: string[]) => string}
  */
 export function hermeticGitRunner(dir) {
   const env = hermeticGitEnv(join(dir, '.git', 'co-hermetic-gitconfig'));
+  for (const name of REPO_LOCATION_ENV) delete env[name];
   return (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf-8', env }).trim();
 }
 

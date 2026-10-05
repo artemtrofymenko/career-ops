@@ -438,7 +438,7 @@ A single-string `modes_dir` (today's default, ~90% of users) behaves exactly as 
 
 ## Offer Verification -- MANDATORY
 
-**NEVER decide whether an offer is active from a bare WebSearch/WebFetch snippet.** Start with `node check-liveness.mjs <url>`: it checks free public ATS APIs first, then falls back to Playwright when the API cannot confirm the posting.
+**NEVER decide whether an offer is active from a bare WebSearch/WebFetch snippet.** Start with `node check-liveness.mjs <url>`: it checks free public ATS APIs first, then falls back to Playwright only when the API returns `null`. A non-null `uncertain` result does not trigger Playwright; it remains unconfirmed.
 
 When checking the browser fallback manually:
 1. `browser_navigate` to the URL

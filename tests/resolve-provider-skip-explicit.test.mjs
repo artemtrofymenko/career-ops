@@ -15,7 +15,12 @@
 // failed command ran a second time.
 //
 // Offline: stub providers, and the local-parser stand-in only counts its calls.
-import { pass, fail, ROOT } from './helpers.mjs';
+// The last check runs a real scan.mjs in a sandbox over a parser fixture that
+// always fails, and counts how many times the scanner executed it.
+import { pass, fail, ROOT, NODE, rmSync } from './helpers.mjs';
+import { execFileSync } from 'child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
 import { join } from 'path';
 import { pathToFileURL } from 'url';
 
@@ -92,6 +97,62 @@ try {
   } else {
     fail(`audit-portals ran the local parser ${parserRuns} time(s): ${JSON.stringify(auditRows)}`);
   }
+
+  // ── scan.mjs itself: a failing explicit local parser runs once, not twice ──
+  // No other provider claims this careers_url, so the fallback has nothing to
+  // fall back to and the scanner must report the parser's own failure. Before
+  // the fix the fallback resolved to local-parser again and re-ran the command.
+  // The detected form is the control: it already ran once.
+  const TRACKER = '# Applications Tracker\n\n| # | Date | Company | Role | Score | Status | PDF | Report | Notes |\n|---|------|---------|------|-------|--------|-----|--------|-------|\n';
+  const portalsYml = (withField) => `title_filter:
+  positive:
+    - "Engineer"
+tracked_companies:
+  - name: Failing Parser Co
+    careers_url: https://self-hosted.example.com/careers
+${withField ? '    provider: local-parser\n' : ''}    parser:
+      command: node
+      script: tests/fixtures/failing-parser.mjs
+`;
+  // Every variable scan.mjs resolves a path from, so the sandbox is the only
+  // data root this spawn can see (same list as tests/scan-output-paths.test.mjs).
+  const SCANNER_PATH_VARS = [
+    'CAREER_OPS_PORTALS', 'CAREER_OPS_PROFILE', 'CAREER_OPS_PIPELINE',
+    'CAREER_OPS_SCAN_HISTORY', 'CAREER_OPS_ROOT', 'CAREER_OPS_DATA_DIR',
+  ];
+  const parserRunsInScan = (withField) => {
+    const dir = mkdtempSync(join(tmpdir(), 'co-skip-explicit-'));
+    try {
+      mkdirSync(join(dir, 'data'), { recursive: true });
+      writeFileSync(join(dir, 'data', 'applications.md'), TRACKER);
+      const portals = join(dir, 'portals.yml');
+      writeFileSync(portals, portalsYml(withField));
+      const marker = join(dir, 'parser-runs.txt');
+      const env = { ...process.env };
+      for (const name of SCANNER_PATH_VARS) delete env[name];
+      try {
+        execFileSync(NODE, [join(ROOT, 'scan.mjs')], {
+          cwd: dir,
+          env: { ...env, CAREER_OPS_ROOT: dir, CAREER_OPS_PORTALS: portals, CO_TEST_PARSER_MARKER: marker },
+          encoding: 'utf-8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+      } catch {
+        // A scan whose only board failed may exit non-zero; the count is what matters.
+      }
+      return existsSync(marker) ? readFileSync(marker, 'utf-8').split('\n').filter(Boolean).length : 0;
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  const detectedRuns = parserRunsInScan(false);
+  if (detectedRuns === 1) pass('scan.mjs runs a failing detected local parser once (control)');
+  else fail(`control drifted: the detected form ran ${detectedRuns} time(s), expected 1`);
+
+  const explicitRuns = parserRunsInScan(true);
+  if (explicitRuns === 1) pass('scan.mjs runs a failing explicit local parser once, not twice');
+  else fail(`scan.mjs ran a failing explicit local parser ${explicitRuns} time(s), expected 1`);
 } catch (err) {
   fail(`resolveProvider skipIds tests could not run: ${err.message}`);
 }

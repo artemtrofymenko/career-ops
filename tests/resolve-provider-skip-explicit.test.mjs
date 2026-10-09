@@ -33,9 +33,10 @@ try {
     detect: (e) => (e.parser?.command ? { url: e.careers_url } : null),
     fetch: async () => { parserRuns++; return [{ title: 'Role', url: 'https://self-hosted.example.com/j/1' }]; },
   };
+  const hostOf = (e) => { try { return new URL(e.careers_url).hostname; } catch { return ''; } };
   const board = {
     id: 'board',
-    detect: (e) => (String(e.careers_url || '').includes('board.example.com') ? { url: e.careers_url } : null),
+    detect: (e) => (hostOf(e) === 'board.example.com' ? { url: e.careers_url } : null),
     fetch: async () => [{ title: 'Role', url: 'https://board.example.com/j/1' }],
   };
   const reg = new Map([['board', board], ['local-parser', localParser]]);

@@ -114,12 +114,11 @@ ${withField ? '    provider: local-parser\n' : ''}    parser:
       command: node
       script: tests/fixtures/failing-parser.mjs
 `;
-  // Every variable scan.mjs resolves a path from, so the sandbox is the only
-  // data root this spawn can see (same list as tests/scan-output-paths.test.mjs).
-  const SCANNER_PATH_VARS = [
-    'CAREER_OPS_PORTALS', 'CAREER_OPS_PROFILE', 'CAREER_OPS_PIPELINE',
-    'CAREER_OPS_SCAN_HISTORY', 'CAREER_OPS_ROOT', 'CAREER_OPS_DATA_DIR',
-  ];
+  // The spawn must see the sandbox and nothing else, so every inherited
+  // CAREER_OPS_* variable is dropped by prefix rather than by a list: a list
+  // goes stale the day scan.mjs learns a new override. CAREER_OPS_TRACKER was
+  // the one a list missed, and with it set this test followed the developer's
+  // real tracker.
   const parserRunsInScan = (withField) => {
     const dir = mkdtempSync(join(tmpdir(), 'co-skip-explicit-'));
     try {
@@ -129,7 +128,7 @@ ${withField ? '    provider: local-parser\n' : ''}    parser:
       writeFileSync(portals, portalsYml(withField));
       const marker = join(dir, 'parser-runs.txt');
       const env = { ...process.env };
-      for (const name of SCANNER_PATH_VARS) delete env[name];
+      for (const name of Object.keys(env)) if (name.toUpperCase().startsWith('CAREER_OPS_')) delete env[name];
       try {
         execFileSync(NODE, [join(ROOT, 'scan.mjs')], {
           cwd: dir,

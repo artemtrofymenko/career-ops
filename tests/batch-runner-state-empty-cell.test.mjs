@@ -58,8 +58,11 @@ test('a worker that fails without output keeps the retry count of every state ro
     // On ubuntu-latest this has seen 3 rows for 2 offers, with no way to tell
     // from the log which row was extra or what the runner printed. Every
     // assertion below carries the whole state file (tabs shown as \t) and the
-    // runner's output, where any lock warning would be.
-    const context = `\nbatch-state.tsv:\n${JSON.stringify(state)}\n${describeSpawn(result, 'batch-runner.sh')}`;
+    // runner's output, where any lock warning would be. Kept on ONE line:
+    // test-all.mjs prints only the first line of an error message plus the
+    // last lines of the suite's output (lib/failure-excerpt.mjs), so a
+    // multi-line message loses everything after its first line in CI.
+    const context = ` | batch-state.tsv=${JSON.stringify(state)} | runner=${JSON.stringify(describeSpawn(result, 'batch-runner.sh'))}`;
     const rows = state.split('\n').filter(Boolean).slice(1);
     assert.equal(rows.length, 2, `expected one state row per offer${context}`);
     for (const row of rows) {

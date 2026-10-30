@@ -29,6 +29,13 @@ const SR_PAGE_SIZE = 100;
 const SR_MAX_PAGES = 50;  // safety cap (5000 postings @ 100/page)
 const SR_DETAIL_BATCH = 5;
 
+// NaN-safe Date.parse, the same helper greenhouse.mjs and ashby.mjs keep.
+function toEpochMs(value) {
+  if (!value) return undefined;
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? undefined : parsed;
+}
+
 /**
  * @param {any} entry
  * @returns {{ fetchDetails: boolean, detailLimit: number }}
@@ -243,6 +250,9 @@ export function parseSmartRecruitersResponse(json, companyName, companySlug) {
     }
     const requisitionId = coerceId(j.refNumber);
     const language = coerceId(j.language?.code);
+    // releasedDate is the posting's publish time. Without it every row was
+    // undated, and the posting-age and --since filters pass an undated row.
+    const postedAt = toEpochMs(j.releasedDate);
     return [{
       title: j.name || '',
       url,
@@ -251,6 +261,7 @@ export function parseSmartRecruitersResponse(json, companyName, companySlug) {
       id: typeof j.id === 'string' || typeof j.id === 'number' ? String(j.id) : undefined,
       ...(requisitionId ? { requisitionId } : {}),
       ...(language ? { language } : {}),
+      ...(postedAt !== undefined ? { postedAt } : {}),
     }];
   });
 }

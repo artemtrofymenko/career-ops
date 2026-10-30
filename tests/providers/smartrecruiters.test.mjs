@@ -524,9 +524,15 @@ try {
         { id: '1', name: 'Dated', company: { name: 'DateCo' }, releasedDate: '2022-07-05T08:50:05.000Z' },
         { id: '2', name: 'Undated', company: { name: 'DateCo' } },
         { id: '3', name: 'Garbled', company: { name: 'DateCo' }, releasedDate: 'not a date' },
+        { id: '4', name: 'Object', company: { name: 'DateCo' }, releasedDate: { toString: 1 } },
       ],
     }, 'DateCo', 'dateco');
-    const [dated, undated, garbled] = rows;
+    const [dated, undated, garbled, objectDate] = rows;
+    if (rows.length === 4 && objectDate && !('postedAt' in objectDate)) {
+      pass('a releasedDate that is not a string is ignored, not thrown on');
+    } else {
+      fail(`object-date row = ${JSON.stringify(objectDate)}, rows = ${rows.length}`);
+    }
     if (dated?.postedAt === Date.parse('2022-07-05T08:50:05.000Z')) {
       pass('parseSmartRecruitersResponse maps releasedDate to postedAt (epoch ms)');
     } else {

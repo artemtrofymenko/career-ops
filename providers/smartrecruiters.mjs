@@ -29,9 +29,11 @@ const SR_PAGE_SIZE = 100;
 const SR_MAX_PAGES = 50;  // safety cap (5000 postings @ 100/page)
 const SR_DETAIL_BATCH = 5;
 
-// NaN-safe Date.parse, the same helper greenhouse.mjs and ashby.mjs keep.
+// NaN-safe Date.parse, as in greenhouse.mjs and ashby.mjs, but strings only:
+// Date.parse on an object whose toString is not callable throws, and one bad
+// row must not abort the whole board.
 function toEpochMs(value) {
-  if (!value) return undefined;
+  if (typeof value !== 'string' || !value) return undefined;
   const parsed = Date.parse(value);
   return Number.isNaN(parsed) ? undefined : parsed;
 }
